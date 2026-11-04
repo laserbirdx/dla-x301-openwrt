@@ -134,3 +134,10 @@ kernel 6.18.55.
 | `ipq5018-dla-x301.dts` | device tree |
 | `openwrt/qualcommax-ipq50xx.diff` | changes to the OpenWrt tree |
 | `0413-*.patch` | SPI-NAND SET_FEATURE fix (required) |
+
+## License
+
+[GPL-2.0](LICENSE), the same as OpenWrt and the Linux kernel.
+
+- `ipq5018-dla-x301.dts` is dual-licensed `GPL-2.0-or-later OR MIT`, as stated in its header.
+- `0413-*.patch` is a backport of an upstream Linux commit and stays under the kernel's GPL-2.0.
