@@ -1,0 +1,9 @@
+*
+!.gitignore
+!README.md
+!ipq5018-dla-x301.dts
+!0413-spi-spi-qpic-snand-write-the-feature-value-before-exe.patch
+!openwrt/
+!openwrt/qualcommax-ipq50xx.diff
+!assets/
+!assets/banner.jpg

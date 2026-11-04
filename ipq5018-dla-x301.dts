@@ -1,0 +1,453 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/dts-v1/;
+
+#include "ipq5018.dtsi"
+#include "ipq5018-ess.dtsi"
+#include "ipq5018-qcn6122.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/reset/qcom,gcc-ipq5018.h>
+
+/ {
+	model = "D-Link DLA-X301";
+	compatible = "dlink,dla-x301", "qcom,ipq5018";
+
+	aliases {
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
+		led-boot = &led_system;
+		led-failsafe = &led_system;
+		led-running = &led_system;
+		led-upgrade = &led_system;
+		serial0 = &blsp1_uart1;
+	};
+
+	chosen {
+		/*
+		 * ubi.mtd=rootfs BILEREK YOK: diger ipq50xx board'lari da vermiyor.
+		 * Verilince initramfs boot'unda kernel bos MTD'ye UBI attach etmeye
+		 * calisiyor, 700+ ubi_io_write hatasi basip boot'u ~90 sn geciktiriyor.
+		 */
+		bootargs-append = " root=/dev/ubiblock0_1 swiotlb=1 coherent_pool=2M";
+		stdout-path = "serial0:115200n8";
+	};
+
+	keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&button_pins>;
+		pinctrl-names = "default";
+
+		button-reset {
+			label = "reset";
+			gpios = <&tlmm 32 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+			debounce-interval = <60>;
+		};
+	};
+
+	/*
+	 * Kasada tek yesil LED var; asagidaki uc GPIO'nun her biri ayni
+	 * fiziksel LED'i yakiyor (olculdu: uc desen de ayni LED'de gorundu,
+	 * renk degisimi yok). OEM device tree de ucunu ayri ayri tanimliyor.
+	 */
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-0 = <&leds_pins>;
+		pinctrl-names = "default";
+
+		led_system: led-0 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_STATUS;
+			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
+		};
+
+		led-1 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_WLAN;
+			gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "phy0tpt";
+		};
+
+		led-2 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_LAN;
+			gpios = <&tlmm 26 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&xo_board_clk {
+	clock-div = <4>;
+	clock-mult = <1>;
+};
+
+&blsp1_uart1 {
+	pinctrl-0 = <&serial_0_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&qfprom {
+	status = "okay";
+};
+
+&uniphy0 {
+	status = "okay";
+
+	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
+	assigned-clock-rates = <UNIPHY_REFCLK_25MHZ>;
+};
+
+/* MAC0 -> dahili GE PHY (mdio0 addr 7) -> 1. jack */
+&gmac0 {
+	status = "okay";
+
+	label = "lan1";
+};
+
+/* MAC1 ---SGMII---> QCA8337 SerDes -> 2. jack */
+&gmac1 {
+	status = "okay";
+
+	phy-mode = "sgmii";
+
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
+};
+
+&mdio0 {
+	status = "okay";
+};
+
+&mdio1 {
+	status = "okay";
+	pinctrl-0 = <&mdio1_pins>;
+	pinctrl-names = "default";
+	reset-gpios = <&tlmm 39 GPIO_ACTIVE_LOW>;
+
+	/*
+	 * QCA8337'nin dort PHY'i var ama cihazda switch tarafina cikan
+	 * TEK fiziksel jack var: canli test (kablo Port B) switch port@2 /
+	 * PHY reg=1'i gosterdi. Diger uc PHY (0/2/3) kullanilmiyor,
+	 * tanimlanmadi.
+	 */
+	qca8337_1: ethernet-phy@1 {
+		reg = <1>;
+	};
+
+	switch0: ethernet-switch@17 {
+		compatible = "qca,qca8337";
+		reg = <17>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			switch0cpu: port@0 {
+				reg = <0>;
+				label = "cpu";
+				phy-mode = "sgmii";
+				ethernet = <&gmac1>;
+				qca,sgmii-enable-pll;
+
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+
+			/* 2. fiziksel jack (Port B) */
+			port@2 {
+				reg = <2>;
+				label = "lan2";
+				phy-handle = <&qca8337_1>;
+			};
+		};
+	};
+};
+
+&qpic_bam {
+	status = "okay";
+};
+
+&qpic_nand {
+	pinctrl-0 = <&qpic_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	/*
+	 * OEM U-Boot (QSDK) QPIC'i raw-nand modunda kullanip oyle birakiyor;
+	 * kernel ise spi-mem modunda devraliyor ve denetleyiciyi hic
+	 * resetlemiyor. Olculdu: U-Boot'ta bootm oncesi tek bir "nand read"
+	 * kernel tarafindaki okumayi busbutun bozuyor. Bloku resetleyip
+	 * temiz devralmayi deniyoruz.
+	 */
+	qcom,phase = <6>;
+
+	/*
+	 * U-Boot flash'tan boot ederken NAND'i yogun kullanip QPIC'i oyle
+	 * devrediyor; kernel surucusu denetleyiciyi hic resetlemedigi icin
+	 * spi-nand probe -512 ile dusuyor ve hic MTD partition olusmuyor.
+	 * (TFTP boot'ta sorun yok, cunku U-Boot NAND'a dokunmuyor.)
+	 */
+
+	/*
+	 * NAND okuma sorunu: tum partitionlar 0xff okunuyor, ECC hatasi yok.
+	 * U-Boot ayni cipi 320 MHz io_macro ile SORUNSUZ okuyor (dogrulandi),
+	 * cunku serial training yapiyor (mtd14 "0:training" dolu, OEM DT
+	 * qcom,phase = 6). Upstream spi-qpic-snand'de ne training ne phase
+	 * ayari var; clock'u 320 MHz'de birakip kalibrasyonsuz okuyor.
+	 *
+	 * 24 MHz denemesi sistemi kilitledi -- 24 MHz XO parent'indan gelir,
+	 * yani calisirken PARENT degistirmis oluyoruz. 100/200/320 MHz hepsi
+	 * GPLL0'dan; sadece divider degisiyor, guvenli.
+	 *
+	 * SONUC: 320 MHz ve 200 MHz BIREBIR AYNI md5'leri veriyor (hepsi 0xff).
+	 * Clock hizi suclu DEGIL, bu yuzden varsayilan 320 MHz'de birakildi.
+	 *
+	 * Siradaki hipotez: cip ID'si DOGRU okunuyor (ESMT bulundu) ama sayfa
+	 * verisi gelmiyor -> komut yolu calisiyor, veri yolu calismiyor.
+	 * ID tek hatli basit komutla, sayfa okuma quad (4 hat) + DMA ile
+	 * yapiliyor. spi-rx-bus-width = <1> ile tek hatta zorlayip test.
+	 */
+
+	/* GigaDevice F50D1G41LB: 128 MiB, page 2048, OOB 64, erase 128 KiB */
+	nand@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		nand-ecc-engine = <&qpic_nand>;
+
+		/*
+		 * ESMT/GigaDevice F50D1G41LB. Cip kendi ECC gereksinimini
+		 * 1-bit bildiriyor, QPIC ise yalniz 4/8-bit destekliyor ve
+		 * surucu "trying 4-bits" fallback yoluna giriyor. Ayni cip
+		 * icin upstream'e onerilen yol (OpenWrt PR #23056,
+		 * TP-Link EAP650-Outdoor) ECC'yi DTS'ten acikca vermek.
+		 */
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+		nand-bus-width = <8>;
+
+		/*
+		 * SABIT partition tablosu (smem DEGIL). "qcom,smem-part"
+		 * parser'i SMEM surucusu hazir degilse -EPROBE_DEFER (-512)
+		 * donduruyor; RAM boot'ta initramfs sayesinde cozuluyor ama
+		 * FLASH boot'ta rootfs'in kendisi MTD'ye bagli oldugu icin
+		 * kilitleniyor (UBI error: cannot open mtd rootfs).
+		 * Offsetler cihazdan okunan /proc/mtd ile birebir ayni.
+		 */
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:sbl1";
+				reg = <0x0 0x80000>;
+				read-only;
+			};
+
+			partition@80000 {
+				label = "0:mibib";
+				reg = <0x80000 0x80000>;
+				read-only;
+			};
+
+			partition@100000 {
+				label = "0:bootconfig";
+				reg = <0x100000 0x40000>;
+				read-only;
+			};
+
+			partition@140000 {
+				label = "0:bootconfig1";
+				reg = <0x140000 0x40000>;
+				read-only;
+			};
+
+			partition@180000 {
+				label = "0:qsee";
+				reg = <0x180000 0x100000>;
+				read-only;
+			};
+
+			partition@280000 {
+				label = "0:qsee_1";
+				reg = <0x280000 0x100000>;
+				read-only;
+			};
+
+			partition@380000 {
+				label = "0:devcfg";
+				reg = <0x380000 0x40000>;
+				read-only;
+			};
+
+			partition@3c0000 {
+				label = "0:devcfg_1";
+				reg = <0x3c0000 0x40000>;
+				read-only;
+			};
+
+			partition@400000 {
+				label = "0:cdt";
+				reg = <0x400000 0x40000>;
+				read-only;
+			};
+
+			partition@440000 {
+				label = "0:cdt_1";
+				reg = <0x440000 0x40000>;
+				read-only;
+			};
+
+			partition@480000 {
+				label = "0:appsblenv";
+				reg = <0x480000 0x80000>;
+			};
+
+			partition@500000 {
+				label = "0:appsbl";
+				reg = <0x500000 0x140000>;
+				read-only;
+			};
+
+			partition@640000 {
+				label = "0:appsbl_1";
+				reg = <0x640000 0x140000>;
+				read-only;
+			};
+
+			partition@780000 {
+				label = "0:art";
+				reg = <0x780000 0x100000>;
+				read-only;
+			};
+
+			partition@880000 {
+				label = "0:training";
+				reg = <0x880000 0x80000>;
+				read-only;
+			};
+
+			partition@900000 {
+				label = "rootfs";
+				reg = <0x900000 0x3a00000>;
+			};
+
+			partition@4300000 {
+				label = "rootfs_1";
+				reg = <0x4300000 0x3a00000>;
+			};
+		};
+	};
+};
+
+&tlmm {
+	mdio1_pins: mdio-state {
+		mdc-pins {
+			pins = "gpio36";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+
+		mdio-pins {
+			pins = "gpio37";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	leds_pins: leds-pins {
+		pins = "gpio22", "gpio25", "gpio26";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+
+	button_pins: button-pins {
+		pins = "gpio32";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
+	qpic_pins: qpic-state {
+		clock-pins {
+			pins = "gpio9";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		cs-pins {
+			pins = "gpio8";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		data-pins {
+			pins = "gpio4", "gpio5", "gpio6", "gpio7";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+
+	serial_0_pins: uart0-state {
+		pins = "gpio20", "gpio21";
+		function = "blsp0_uart0";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+/*
+ * IPQ5018 dahili radyo (2.4 GHz).
+ * qcom,ath11k-calibration-variant bilerek YOK: cihaza ait bir
+ * ipq-wifi-* (board-2.bin) paketi henuz yok, variant verilirse
+ * ath11k board data bulamaz. Ilk boot varsayilan BDF ile denenecek.
+ */
+&wifi {
+	status = "okay";
+
+	qcom,rproc = <&q6_wcss_pd1>;
+	qcom,userpd-subsys-name = "q6v5_wcss_userpd1";
+	qcom,ath11k-fw-memory-mode = <1>;
+	qcom,bdf-addr = <0x4c400000>;
+};
+
+/*
+ * QCN6122 (5 GHz).
+ * userpd2, userpd3 DEGIL: OEM device tree bu cihazda wifi1'i
+ * "q6v5_wcss_userpd2"ye bagliyor (oem_dt/base/soc/wifi1@c000000).
+ * pd3 ile denendiginde ana Q6 "err_smem_ver.2.1 / USER-PD DOG stalled
+ * initialization, Process name :wlan2" ile crash ediyordu.
+ * Linksys MX2000 da ayni sekilde userpd2 kullaniyor.
+ */
+&wifi1 {
+	status = "okay";
+
+	qcom,rproc = <&q6_wcss_pd2>;
+	qcom,userpd-subsys-name = "q6v5_wcss_userpd2";
+	qcom,ath11k-fw-memory-mode = <1>;
+	qcom,bdf-addr = <0x4d100000>;
+	qcom,m3-dump-addr = <0x4df00000>;
+};
