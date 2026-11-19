@@ -2,7 +2,12 @@
 
 # OpenWrt for D-Link DLA-X301
 
-![OpenWrt: Custom Port](https://img.shields.io/badge/OpenWrt-Custom%20Port-00B5E2?logo=openwrt&logoColor=white) ![SoC: Qualcomm IPQ5018](https://img.shields.io/badge/SoC-Qualcomm%20IPQ5018-3253DC?logo=qualcomm&logoColor=white) ![Wi-Fi: 802.11ax (Wi-Fi 6)](https://img.shields.io/badge/Wi--Fi-802.11ax%20(Wi--Fi%206)-success) ![license: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue)
+<p align="center">
+  <img src="https://img.shields.io/badge/OpenWrt-Custom%20Port-00B5E2?logo=openwrt&logoColor=white" alt="OpenWrt: Custom Port" />
+  <img src="https://img.shields.io/badge/SoC-Qualcomm%20IPQ5018-3253DC?logo=qualcomm&logoColor=white" alt="SoC: Qualcomm IPQ5018" />
+  <img src="https://img.shields.io/badge/Wi--Fi-802.11ax%20%28Wi--Fi%206%29-success" alt="Wi-Fi: 802.11ax (Wi-Fi 6)" />
+  <img src="https://img.shields.io/badge/license-GPL--2.0-blue" alt="license: GPL-2.0" />
+</p>
 
 OpenWrt port for the D-Link DLA-X301 access point (Qualcomm IPQ5018).
 Both radios, LuCI, LAN/WAN, correct MAC addresses and persistent installation to
